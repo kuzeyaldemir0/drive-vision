@@ -45,7 +45,7 @@ def build_unet(input_shape, num_classes):
     x = tf.keras.layers.Conv2D(64, (3, 3), activation='relu', padding='same')(x)
     x = tf.keras.layers.Conv2D(64, (3, 3), activation='relu', padding='same')(x)
 
-    outputs = tf.keras.layers.Conv2D(num_classes, (1,1), activation='softmax')(x)
+    outputs = tf.keras.layers.Conv2D(num_classes, (1,1))(x)
 
     model = Model(inputs=inputs, outputs=outputs, name='unet')
     return model
