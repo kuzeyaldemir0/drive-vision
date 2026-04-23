@@ -46,6 +46,18 @@ All experiments use 20 epochs, batch size 8, 160/40 train/val split unless noted
 | No batch norm | 21.9% | 19.9% | Stable generalization |
 | With batch norm | 27.8% | 6.6% | Catastrophic overfitting — batch statistics unreliable with batch size 8 on 160 images |
 
+### Transfer learning: MobileNetV2 encoder (no skip connections)
+
+First step toward transfer learning. The hand-written encoder is replaced with a frozen ImageNet-pretrained MobileNetV2 (`include_top=False`, `weights='imagenet'`). The decoder is built from scratch as 5 Conv2DTranspose + Conv2D blocks with no skip connections — deliberately, so the effect of the pretrained encoder can be measured in isolation before adding skips.
+
+| Metric | Train | Validation |
+|--------|-------|------------|
+| Accuracy | 73.5% | 66.5% |
+| mIoU | 18.0% | 15.9% |
+| Loss | 0.840 | 1.177 |
+
+Result is ~4 points lower val mIoU than the from-scratch U-Net baseline. Two factors at play: (1) val mIoU was still climbing at epoch 20 (0.140 → 0.142 → 0.146 → 0.159 across epochs 17–20), so this run was undertrained; (2) without skips, the decoder reconstructs 128×384 masks from a 4×12 feature map with only deep semantic channels — no edges or textures. Skip connections are the obvious next step.
+
 ### Loss function experiments (from earlier 30-epoch runs, directionally valid)
 
 | Loss Function | Val mIoU | Notes |
@@ -62,6 +74,8 @@ The top 4 classes (vegetation, road, sky, terrain) cover 74% of all pixels. The 
 
 ### Planned experiments
 
+- MobileNetV2 encoder **with** skip connections (next)
+- Fine-tuning the pretrained encoder (unfreeze + low LR)
 - Increased filter counts for more model capacity
 - Attention U-Net variant
 - Lightweight U-Net (depthwise separable convolutions)
