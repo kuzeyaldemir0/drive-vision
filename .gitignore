@@ -14,6 +14,7 @@ env/
 # Data & model artifacts (too large for git)
 data/
 checkpoints/
+logs/
 *.h5
 *.keras
 *.pb
