@@ -4,7 +4,7 @@ Semantic segmentation for autonomous driving perception — a from-scratch imple
 
 ## Overview
 
-This project explores how architectural choices, loss functions, and hyperparameters affect semantic segmentation performance on urban driving scenes. The baseline U-Net is implemented from scratch in TensorFlow/Keras and trained on the KITTI Semantic Segmentation dataset (200 images, 19 classes + ignore class). All models are built, trained, and evaluated on an Apple M4 GPU.
+This project explores how architectural choices, loss functions, and hyperparameters affect semantic segmentation performance on urban driving scenes. The baseline U-Net is implemented from scratch in TensorFlow/Keras and trained on the KITTI Semantic Segmentation dataset (200 images, 19 classes + ignore class). All models are trained and evaluated on an Apple M4 GPU.
 
 ## Architecture
 
@@ -15,12 +15,15 @@ The baseline U-Net follows the original Ronneberger et al. (2015) paper:
 - **Decoder:** 4 levels of Conv2DTranspose (2×2, stride 2) + skip connection concatenation + double Conv2D
 - **Output:** 1×1 Conv2D with 20 channels (19 classes + ignore), raw logits
 - **Loss:** SparseCategoricalCrossentropy (from_logits=True)
-- **Optimizer:** Adam
+- **Optimizer:** Adam (lr=0.001)
+- **Input resolution:** 128×384
 - **Total parameters:** ~31M
 
 ## Experiments & Results
 
-### Current best: LR 0.001, plain cross-entropy, 20 epochs
+All experiments use 20 epochs, batch size 8, 160/40 train/val split unless noted otherwise.
+
+### Current best: vanilla U-Net, LR 0.001
 
 | Metric | Train | Validation |
 |--------|-------|------------|
@@ -28,67 +31,42 @@ The baseline U-Net follows the original Ronneberger et al. (2015) paper:
 | mIoU | 21.9% | 19.9% |
 | Loss | 0.691 | 0.891 |
 
-### Learning rate experiment
+### Learning rate comparison
 
-| Learning Rate | Val Accuracy | Val mIoU | Val Loss |
-|---------------|-------------|----------|----------|
-| 0.0001 | 71.9% | 17.5% | 0.958 |
-| **0.001** | **73.7%** | **19.9%** | **0.891** |
+| Learning Rate | Val Accuracy | Val mIoU | Val Loss | Notes |
+|---------------|-------------|----------|----------|-------|
+| 0.0001 | 71.9% | 17.5% | 0.958 | Too slow |
+| **0.001** | **73.7%** | **19.9%** | **0.891** | **Best** |
+| 0.01 | 32.1% | 1.8% | 2.056 | Gradient explosion, model collapsed |
 
-Higher learning rate converges ~3x faster and reaches better final performance.
+### Batch normalization experiment
 
-### Loss function experiments
+| Config | Train mIoU | Val mIoU | Notes |
+|--------|-----------|----------|-------|
+| No batch norm | 21.9% | 19.9% | Stable generalization |
+| With batch norm | 27.8% | 6.6% | Catastrophic overfitting — batch statistics unreliable with batch size 8 on 160 images |
+
+### Loss function experiments (from earlier 30-epoch runs, directionally valid)
 
 | Loss Function | Val mIoU | Notes |
 |---------------|----------|-------|
-| **Cross-entropy** | **20.2%** | Best performer — simple and stable |
-| Focal loss (γ=2) | 18.5% | Too aggressive for small dataset |
-| Focal loss + dropout 0.4 | 18.0% | Dual constraints hurt capacity |
-| Weighted CE (cap 10) | 15.8% | Weights too extreme even when capped |
+| **Cross-entropy** | **~20%** | Best — simple and stable |
+| Focal loss (γ=2) | ~18.5% | Too aggressive for small dataset |
+| Weighted CE (cap 10) | ~15.8% | Weights too extreme |
 
-Finding: on a 160-image dataset, class imbalance techniques hurt rather than help. The model doesn't have enough examples of rare classes to learn them regardless of loss weighting.
-
-### Regularization experiments
-
-| Regularization | Val mIoU | Notes |
-|----------------|----------|-------|
-| None | 20.2% | Best |
-| Dropout 0.4 at bottleneck | 20.2% | No measurable difference |
+Finding: on a 160-image dataset, class imbalance techniques hurt rather than help. The model lacks sufficient examples of rare classes regardless of loss weighting.
 
 ### Class distribution (KITTI training set)
 
-| Class | Pixels | Percentage |
-|-------|--------|------------|
-| Vegetation (8) | 2,349,785 | 29.9% |
-| Road (0) | 1,832,617 | 23.3% |
-| Sky (10) | 876,581 | 11.2% |
-| Terrain (9) | 767,460 | 9.8% |
-| Building (2) | 609,024 | 7.7% |
-| Car (13) | 482,763 | 6.1% |
-| Sidewalk (1) | 313,266 | 4.0% |
-| Ignore (19) | 294,016 | 3.7% |
-| Pole (5) | 118,929 | 1.5% |
-| Fence (4) | 54,935 | 0.7% |
-| Traffic sign (7) | 40,967 | 0.5% |
-| Wall (3) | 39,104 | 0.5% |
-| Traffic light (6) | 27,666 | 0.4% |
-| Truck (14) | 19,878 | 0.3% |
-| Train (16) | 17,726 | 0.2% |
-| Bus (15) | 6,122 | 0.1% |
-| Bicycle (18) | 5,254 | 0.1% |
-| Person (11) | 4,789 | 0.1% |
-| Rider (12) | 2,521 | 0.03% |
-| Motorcycle (17) | 917 | 0.01% |
-
-Extreme imbalance: the top 4 classes cover 74% of all pixels. The bottom 10 classes combined cover less than 3%.
+The top 4 classes (vegetation, road, sky, terrain) cover 74% of all pixels. The bottom 10 classes combined cover less than 3%. Motorcycle has just 917 pixels (0.01%) across all training images.
 
 ### Planned experiments
 
-- Higher resolution training (256×512 or 368×1232)
-- Horizontal flip augmentation
-- Learning rate scheduling (CosineDecay)
+- Increased filter counts for more model capacity
 - Attention U-Net variant
 - Lightweight U-Net (depthwise separable convolutions)
+- Higher resolution training (256×768)
+- Horizontal flip augmentation
 - DeepLabV3+ pretrained comparison
 
 ## Dataset
