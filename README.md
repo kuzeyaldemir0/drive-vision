@@ -23,13 +23,13 @@ The baseline U-Net follows the original Ronneberger et al. (2015) paper:
 
 All experiments use 20 epochs, batch size 8, 160/40 train/val split unless noted otherwise.
 
-### Current best: vanilla U-Net, LR 0.001
+### Current best: MobileNet U-Net with skip connections
 
 | Metric | Train | Validation |
 |--------|-------|------------|
-| Accuracy | 79.4% | 73.7% |
-| mIoU | 21.9% | 19.9% |
-| Loss | 0.691 | 0.891 |
+| Accuracy | 84.0% | 80.0% |
+| mIoU | 26.4% | 24.0% |
+| Loss | 0.537 | 0.725 |
 
 ### Learning rate comparison
 
@@ -58,6 +58,18 @@ First step toward transfer learning. The hand-written encoder is replaced with a
 
 Result is ~4 points lower val mIoU than the from-scratch U-Net baseline. Two factors at play: (1) val mIoU was still climbing at epoch 20 (0.140 → 0.142 → 0.146 → 0.159 across epochs 17–20), so this run was undertrained; (2) without skips, the decoder reconstructs 128×384 masks from a 4×12 feature map with only deep semantic channels — no edges or textures. Skip connections are the obvious next step.
 
+### Transfer learning: MobileNetV2 encoder with skip connections
+
+Added 4 skip connections to the frozen MobileNetV2 encoder, tapping `block_1_expand_relu`, `block_3_expand_relu`, `block_6_expand_relu`, and `block_13_expand_relu`. The decoder uses 5 Conv2DTranspose blocks: 4 with concatenated skips + 1 final no-skip upsample (MobileNetV2's first layer is stride-2, so there's no full-resolution encoder feature map to skip from). Encoder remains frozen.
+
+| Metric | Train | Validation |
+|--------|-------|------------|
+| Accuracy | 84.0% | 80.0% |
+| mIoU | 26.4% | 24.0% |
+| Loss | 0.537 | 0.725 |
+
+Val mIoU improved +8.1 points over the no-skip version and +4.1 over the from-scratch U-Net baseline — a clean confirmation that the decoder needs intermediate encoder features to reconstruct spatial detail. Train mIoU kept climbing past epoch 15 while val mIoU plateaued around 24%, indicating the model has reached the data ceiling for a 160-image dataset. Best validation was actually epoch 18 (val mIoU 25.0%); final saved weights are from epoch 20 due to lack of `save_best_only`. The next high-leverage move is data augmentation, not further architectural changes.
+
 ### Loss function experiments (from earlier 30-epoch runs, directionally valid)
 
 | Loss Function | Val mIoU | Notes |
@@ -74,13 +86,12 @@ The top 4 classes (vegetation, road, sky, terrain) cover 74% of all pixels. The 
 
 ### Planned experiments
 
-- MobileNetV2 encoder **with** skip connections (next)
-- Fine-tuning the pretrained encoder (unfreeze + low LR)
+- Horizontal flip augmentation — retrain both the from-scratch U-Net and the MobileNet U-Net on the augmented dataset (next)
+- Fine-tuning the pretrained MobileNetV2 encoder (unfreeze + low LR)
 - Increased filter counts for more model capacity
 - Attention U-Net variant
 - Lightweight U-Net (depthwise separable convolutions)
 - Higher resolution training (256×768)
-- Horizontal flip augmentation
 - DeepLabV3+ pretrained comparison
 
 ## Dataset
