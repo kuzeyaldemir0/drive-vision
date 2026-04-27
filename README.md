@@ -23,13 +23,15 @@ The baseline U-Net follows the original Ronneberger et al. (2015) paper:
 
 All experiments use 20 epochs, batch size 8, 160/40 train/val split unless noted otherwise.
 
-### Current best: MobileNet U-Net with skip connections
+### Current best: MobileNet U-Net with skip connections + horizontal flip augmentation
 
 | Metric | Train | Validation |
 |--------|-------|------------|
-| Accuracy | 84.0% | 80.0% |
-| mIoU | 26.4% | 24.0% |
-| Loss | 0.537 | 0.725 |
+| Accuracy | 88.2% | 81.8% |
+| mIoU | 31.7% | 26.9% |
+| Loss | 0.381 | 0.643 |
+
+Best epoch (18) reached **27.4% val mIoU** (saved separately via `save_best_only=True`).
 
 ### Learning rate comparison
 
@@ -70,6 +72,20 @@ Added 4 skip connections to the frozen MobileNetV2 encoder, tapping `block_1_exp
 
 Val mIoU improved +8.1 points over the no-skip version and +4.1 over the from-scratch U-Net baseline — a clean confirmation that the decoder needs intermediate encoder features to reconstruct spatial detail. Train mIoU kept climbing past epoch 15 while val mIoU plateaued around 24%, indicating the model has reached the data ceiling for a 160-image dataset. Best validation was actually epoch 18 (val mIoU 25.0%); final saved weights are from epoch 20 due to lack of `save_best_only`. The next high-leverage move is data augmentation, not further architectural changes.
 
+### Transfer learning: MobileNetV2 encoder with skip connections + horizontal flip augmentation
+
+Added deterministic horizontal flip augmentation to the prior skip-connection setup. Every training image is mirrored via `tf.image.flip_left_right` (image and mask synchronously) and concatenated with the originals, doubling the effective training set from 160 to 320 examples. The validation set is left unaugmented to keep comparisons against prior baselines clean. Encoder still frozen, all other settings (skip connections, lr=1e-3, batch size 8, 20 epochs) match the prior run. `ModelCheckpoint(save_best_only=True, monitor='val_miou')` was added to preserve the best epoch's weights independent of the final epoch.
+
+| Metric | Train | Validation |
+|--------|-------|------------|
+| Accuracy | 88.2% | 81.8% |
+| mIoU | 31.7% | 26.9% |
+| Loss | 0.381 | 0.643 |
+
+Best epoch was **18** (val mIoU 27.4%, val accuracy 82.2%, val loss 0.641) — saved separately via the checkpoint callback. Final epoch metrics shown above.
+
+Augmentation lifted val mIoU by +2.4 points on the best epoch (25.0% → 27.4%) and +2.9 points on the final epoch (24.0% → 26.9%) versus the no-flip skip-connection run. Faster early convergence is also visible: epoch 1 val mIoU was 9.5% vs. 4.3% in the no-flip run, suggesting the augmented dataset gave the model meaningfully more diverse signal per epoch. Train/val gap widened slightly (~5 points), consistent with 2× the gradient updates per epoch on the same underlying 160-image information content. Diminishing returns relative to the +8.1 jump from skip connections — the bottleneck is now closer to dataset ceiling than architectural deficit.
+
 ### Loss function experiments (from earlier 30-epoch runs, directionally valid)
 
 | Loss Function | Val mIoU | Notes |
@@ -86,8 +102,8 @@ The top 4 classes (vegetation, road, sky, terrain) cover 74% of all pixels. The 
 
 ### Planned experiments
 
-- Horizontal flip augmentation — retrain both the from-scratch U-Net and the MobileNet U-Net on the augmented dataset (next)
-- Fine-tuning the pretrained MobileNetV2 encoder (unfreeze + low LR)
+- Fine-tuning the pretrained MobileNetV2 encoder (unfreeze + low LR, e.g. 1e-5) (next)
+- Horizontal flip augmentation on the from-scratch U-Net for direct A/B comparison
 - Increased filter counts for more model capacity
 - Attention U-Net variant
 - Lightweight U-Net (depthwise separable convolutions)
@@ -103,7 +119,8 @@ KITTI Semantic Segmentation — 200 annotated urban driving images from Karlsruh
 ```
 drive-vision/
 ├── notebook.ipynb      # Data pipeline, training, evaluation, visualization
-├── unet.py             # U-Net model architecture
+├── unet.py             # From-scratch U-Net architecture + preprocessing
+├── mobile_u_net.py     # MobileNetV2-based U-Net + flip augmentation helper
 ├── checkpoints/        # Saved model weights (gitignored)
 ├── logs/               # TensorBoard logs (gitignored)
 ├── data/               # KITTI dataset (gitignored)

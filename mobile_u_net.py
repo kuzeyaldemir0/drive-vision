@@ -77,6 +77,11 @@ def build_mobile_u_net(input_shape, num_classes):
     model = tf.keras.Model(inputs=inputs, outputs=outputs, name='mobile_u_net')
     return model
 
+def flip(image, mask):
+    image = tf.image.flip_left_right(image)
+    mask = tf.image.flip_left_right(mask)
+    return image, mask
+
 
 if __name__ == "__main__":
     model = build_mobile_u_net(input_shape=(128,384,3), num_classes=20)
