@@ -6,6 +6,18 @@ Semantic segmentation for autonomous driving perception — a from-scratch imple
 
 This project explores how architectural choices, loss functions, and hyperparameters affect semantic segmentation performance on urban driving scenes. The baseline U-Net is implemented from scratch in TensorFlow/Keras and trained on the KITTI Semantic Segmentation dataset (200 images, 19 classes + ignore class). All models are trained and evaluated on an Apple M4 GPU.
 
+## Sample predictions
+
+Three validation set predictions from the best model (MobileNet U-Net with skip connections, flip augmentation, and encoder fine-tuning at lr=1e-4):
+
+![Sample prediction 1](images/sample_prediction_1.png)
+
+![Sample prediction 2](images/sample_prediction_2.png)
+
+![Sample prediction 3](images/sample_prediction_3.png)
+
+Per-image mIoU (shown above each prediction) averages over only the classes present in that specific image, so absolute values are higher than the dataset-wide aggregate of 28.3% — which averages across all 19 classes including rare ones (motorcycle, traffic sign, train) that don't appear in most images.
+
 ## Architecture
 
 The baseline U-Net follows the original Ronneberger et al. (2015) paper:
@@ -165,6 +177,8 @@ drive-vision/
 ├── notebook.ipynb      # Data pipeline, training, evaluation, visualization
 ├── unet.py             # From-scratch U-Net architecture + preprocessing
 ├── mobile_u_net.py     # MobileNetV2-based U-Net + flip augmentation helper
+├── scripts/            # Standalone scripts (e.g. generate_sample_predictions.py)
+├── images/             # Sample predictions for README
 ├── checkpoints/        # Saved model weights (gitignored)
 ├── logs/               # TensorBoard logs (gitignored)
 ├── data/               # KITTI dataset (gitignored)
@@ -189,6 +203,7 @@ Training and evaluation in `notebook.ipynb`. Model architecture in `unet.py`.
 ## References
 
 - Ronneberger, O., Fischer, P., & Brox, T. (2015). U-Net: Convolutional Networks for Biomedical Image Segmentation. MICCAI 2015.
+- Sandler, M., Howard, A., Zhu, M., Zhmoginov, A., & Chen, L. C. (2018). MobileNetV2: Inverted Residuals and Linear Bottlenecks. CVPR 2018.
 - Geiger, A., Lenz, P., & Urtasun, R. (2012). Are we ready for Autonomous Driving? The KITTI Vision Benchmark Suite. CVPR 2012.
 
 ## License
