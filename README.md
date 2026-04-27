@@ -23,15 +23,15 @@ The baseline U-Net follows the original Ronneberger et al. (2015) paper:
 
 All experiments use 20 epochs, batch size 8, 160/40 train/val split unless noted otherwise.
 
-### Current best: MobileNet U-Net with skip connections + horizontal flip augmentation
+### Current best: MobileNet U-Net with skip connections + flip augmentation + encoder fine-tuning (lr=1e-4)
 
-| Metric | Train | Validation |
+| Metric | Train (epoch 7) | Validation (epoch 7, best) |
 |--------|-------|------------|
-| Accuracy | 88.2% | 81.8% |
-| mIoU | 31.7% | 26.9% |
-| Loss | 0.381 | 0.643 |
+| Accuracy | 91.2% | 82.6% |
+| mIoU | 39.4% | **28.3%** |
+| Loss | 0.275 | 0.689 |
 
-Best epoch (18) reached **27.4% val mIoU** (saved separately via `save_best_only=True`).
+Saved via `save_best_only=True`. Final validation mIoU after a sequence of architectural and data interventions (skip connections, horizontal flip augmentation, encoder unfreezing). Roughly +8.4 points over the from-scratch U-Net baseline.
 
 ### Learning rate comparison
 
@@ -86,6 +86,36 @@ Best epoch was **18** (val mIoU 27.4%, val accuracy 82.2%, val loss 0.641) — s
 
 Augmentation lifted val mIoU by +2.4 points on the best epoch (25.0% → 27.4%) and +2.9 points on the final epoch (24.0% → 26.9%) versus the no-flip skip-connection run. Faster early convergence is also visible: epoch 1 val mIoU was 9.5% vs. 4.3% in the no-flip run, suggesting the augmented dataset gave the model meaningfully more diverse signal per epoch. Train/val gap widened slightly (~5 points), consistent with 2× the gradient updates per epoch on the same underlying 160-image information content. Diminishing returns relative to the +8.1 jump from skip connections — the bottleneck is now closer to dataset ceiling than architectural deficit.
 
+### Transfer learning: MobileNetV2 encoder fine-tuning
+
+After establishing skip + flip as the strongest frozen-encoder configuration (val mIoU 27.4% best), the natural next step was to unfreeze the MobileNetV2 encoder and fine-tune it at a low learning rate, allowing the ImageNet features to refine toward the driving-scene domain. Two A/B runs at different learning rates were performed; both load the same `mobilenet_frozen_skip_flip_lr0.001_best.keras` checkpoint and differ only in LR, isolating the LR effect.
+
+#### Fine-tuning at lr=1e-5 (10 epochs)
+
+The canonical "safe" fine-tuning LR — 100× lower than the original training LR. Encoder fully unfrozen and the model recompiled with Adam(lr=1e-5).
+
+| Metric | Train (epoch 10) | Validation (epoch 10, best) |
+|--------|-------|------------|
+| Accuracy | 90.2% | 82.9% |
+| mIoU | 35.1% | 27.8% |
+| Loss | 0.312 | 0.633 |
+
+Val mIoU climbed monotonically every epoch from 27.4% → 27.8% (+0.4 points). No overfitting: train/val gap stable at ~7 points, val loss only crept slightly. The encoder made conservative refinements to ImageNet features without disrupting them — but progress was glacial.
+
+#### Fine-tuning at lr=1e-4 (10 epochs)
+
+A 10× higher LR than the canonical fine-tuning rate, but still 10× lower than the original training LR. Same starting checkpoint, same architecture, same dataset, same epoch budget.
+
+| Metric | Train (epoch 7) | Validation (epoch 7, best) |
+|--------|-------|------------|
+| Accuracy | 91.2% | 82.6% |
+| mIoU | 39.4% | **28.3%** |
+| Loss | 0.275 | 0.689 |
+
+Val mIoU peaked at 28.3% on epoch 7, then declined to 28.2% by epoch 10. Train mIoU kept climbing aggressively (35.1% → 42.2% across the run) and train/val gap doubled to ~14 points — early overfitting clearly visible. `save_best_only=True` preserved the epoch-7 weights as the run's saved output.
+
+**LR comparison takeaway.** 1e-4 achieved a higher peak (28.3% vs 27.8%) but began overfitting around epoch 7, while 1e-5 was still climbing slowly at epoch 10. The +0.5 mIoU point gain from 1e-4 came at the cost of significantly faster overfitting — the canonical "fine-tuning LR tradeoff" in transfer learning. Combined with diminishing returns from earlier interventions (skip +8.1, flip +2.4, fine-tune +0.5–0.9), this confirms the model is essentially at the data ceiling for KITTI's 160-image training set.
+
 ### Loss function experiments (from earlier 30-epoch runs, directionally valid)
 
 | Loss Function | Val mIoU | Notes |
@@ -100,15 +130,29 @@ Finding: on a 160-image dataset, class imbalance techniques hurt rather than hel
 
 The top 4 classes (vegetation, road, sky, terrain) cover 74% of all pixels. The bottom 10 classes combined cover less than 3%. Motorcycle has just 917 pixels (0.01%) across all training images.
 
-### Planned experiments
+### Summary
 
-- Fine-tuning the pretrained MobileNetV2 encoder (unfreeze + low LR, e.g. 1e-5) (next)
+| Run | Val mIoU |
+|---|---|
+| Baseline U-Net (from scratch) | 19.9% |
+| MobileNetV2 encoder, no skips | 15.9% |
+| MobileNetV2 encoder, with skips | 25.0% |
+| MobileNetV2 + skips + flip aug | 27.4% |
+| MobileNetV2 + skips + flip + fine-tune (lr=1e-5) | 27.8% |
+| **MobileNetV2 + skips + flip + fine-tune (lr=1e-4)** | **28.3%** |
+
+The progression follows a clean diminishing-returns curve. Skip connections (+8.1 pts) were the biggest single gain, addressing a clear architectural deficit — the decoder needed intermediate encoder features to reconstruct spatial detail. Augmentation (+2.4 pts) and encoder fine-tuning (+0.5–0.9 pts depending on LR) confirmed the bottleneck shifting from architecture to data. The remaining gap to production-quality segmentation isn't an architecture or hyperparameter problem; it's a dataset-size problem. KITTI's 160 training images cap practical performance regardless of further model tweaks.
+
+### Possible future directions
+
+These weren't pursued in this project but are natural follow-ups for pushing past the data ceiling:
+
+- Pretraining on Cityscapes (5,000 images, same Cityscapes label scheme) before fine-tuning on KITTI
 - Horizontal flip augmentation on the from-scratch U-Net for direct A/B comparison
-- Increased filter counts for more model capacity
-- Attention U-Net variant
-- Lightweight U-Net (depthwise separable convolutions)
-- Higher resolution training (256×768)
-- DeepLabV3+ pretrained comparison
+- Brightness / contrast jitter to simulate weather and time-of-day variation
+- Attention U-Net or DeepLabV3+ as alternative architectures
+- Higher resolution training (256×768) using more of KITTI's native 1242px width
+- Encoder fine-tuning with selective unfreezing (e.g. only top blocks) and LR warmup schedules
 
 ## Dataset
 
