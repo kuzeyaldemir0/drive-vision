@@ -128,7 +128,20 @@ Val mIoU peaked at 28.3% on epoch 7, then declined to 28.2% by epoch 10. Train m
 
 **LR comparison takeaway.** 1e-4 achieved a higher peak (28.3% vs 27.8%) but began overfitting around epoch 7, while 1e-5 was still climbing slowly at epoch 10. The +0.5 mIoU point gain from 1e-4 came at the cost of significantly faster overfitting — the canonical "fine-tuning LR tradeoff" in transfer learning. Combined with diminishing returns from earlier interventions (skip +8.1, flip +2.4, fine-tune +0.5–0.9), this confirms the model is essentially at the data ceiling for KITTI's 160-image training set.
 
-### Loss function experiments (from earlier 30-epoch runs, directionally valid)
+### Sparse categorical focal loss experiment
+
+To test whether rare-class performance could be improved by focusing training on hard pixels, the strongest MobileNet U-Net setup was rerun with sparse categorical focal loss (`gamma=2.0`) instead of sparse categorical cross-entropy. Nothing else changed: same MobileNetV2 skip architecture, same 160/40 split, same horizontal flip augmentation, same learning rates, same epoch counts, and same checkpointing on `val_miou`.
+
+| Run | Best Val Accuracy | Best Val mIoU | Best Val Loss | Notes |
+|---|---:|---:|---:|---|
+| Frozen encoder + CE | 82.2% | **27.4%** | 0.636 | Original skip + flip run |
+| Frozen encoder + focal loss (γ=2) | 81.0% | 26.6% | 0.428 | Lower loss scale, lower mIoU |
+| Fine-tuned encoder + CE (lr=1e-4) | 83.0% | **28.3%** | 0.634 | Current best |
+| Fine-tuned encoder + focal loss (γ=2, lr=1e-4) | 81.5% | 27.0% | 0.443 | Higher train mIoU, worse validation mIoU |
+
+Focal loss increased training mIoU substantially during fine-tuning (47.5% vs. 42.2% for CE) but did not translate into validation gains. The best fine-tuned focal model reached 27.0% validation mIoU, 1.3 points below the cross-entropy best. This reinforces the earlier pattern: loss reweighting can emphasize hard pixels, but it cannot compensate for the limited number of real examples for rare KITTI classes.
+
+### Earlier loss function experiments (from 30-epoch runs, directionally valid)
 
 | Loss Function | Val mIoU | Notes |
 |---------------|----------|-------|
@@ -150,10 +163,12 @@ The top 4 classes (vegetation, road, sky, terrain) cover 74% of all pixels. The 
 | MobileNetV2 encoder, no skips | 15.9% |
 | MobileNetV2 encoder, with skips | 25.0% |
 | MobileNetV2 + skips + flip aug | 27.4% |
+| MobileNetV2 + skips + flip aug + focal loss (γ=2) | 26.6% |
+| MobileNetV2 + skips + flip + focal loss (γ=2) + fine-tune (lr=1e-4) | 27.0% |
 | MobileNetV2 + skips + flip + fine-tune (lr=1e-5) | 27.8% |
 | **MobileNetV2 + skips + flip + fine-tune (lr=1e-4)** | **28.3%** |
 
-The progression follows a clean diminishing-returns curve. Skip connections (+8.1 pts) were the biggest single gain, addressing a clear architectural deficit — the decoder needed intermediate encoder features to reconstruct spatial detail. Augmentation (+2.4 pts) and encoder fine-tuning (+0.5–0.9 pts depending on LR) confirmed the bottleneck shifting from architecture to data. The remaining gap to production-quality segmentation isn't an architecture or hyperparameter problem; it's a dataset-size problem. KITTI's 160 training images cap practical performance regardless of further model tweaks.
+The progression follows a clean diminishing-returns curve. Skip connections (+8.1 pts) were the biggest single gain, addressing a clear architectural deficit — the decoder needed intermediate encoder features to reconstruct spatial detail. Augmentation (+2.4 pts) and encoder fine-tuning (+0.5–0.9 pts depending on LR) confirmed the bottleneck shifting from architecture to data. Focal loss underperformed cross-entropy on the same best architecture, so the remaining gap to production-quality segmentation is not primarily a loss-function problem; it's a dataset-size problem. KITTI's 160 training images cap practical performance regardless of further model tweaks.
 
 ### Possible future directions
 
