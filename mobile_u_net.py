@@ -10,28 +10,28 @@ for label in labels:
 mapping[mapping == 255] = 19
 
 
-@tf.keras.utils.register_keras_serializable(package="drive_vision")
-def sparse_categorical_focal_loss(y_true, y_pred):
-    gamma = 2.0
+def sparse_categorical_focal_loss(gamma=2.0):
+    def loss(y_true, y_pred):
+        y_true = tf.squeeze(tf.cast(y_true, tf.int32), axis=-1)
 
-    y_true = tf.squeeze(tf.cast(y_true, tf.int32), axis=-1)
+        cross_entropy = tf.keras.losses.sparse_categorical_crossentropy(
+            y_true,
+            y_pred,
+            from_logits=True,
+        )
 
-    cross_entropy = tf.keras.losses.sparse_categorical_crossentropy(
-        y_true,
-        y_pred,
-        from_logits=True,
-    )
+        probabilities = tf.nn.softmax(y_pred, axis=-1)
+        true_class_probability = tf.gather(
+            probabilities,
+            y_true,
+            axis=-1,
+            batch_dims=3,
+        )
 
-    probabilities = tf.nn.softmax(y_pred, axis=-1)
-    true_class_probability = tf.gather(
-        probabilities,
-        y_true,
-        axis=-1,
-        batch_dims=3,
-    )
+        focal_weight = tf.pow(1.0 - true_class_probability, gamma)
+        return focal_weight * cross_entropy
 
-    focal_weight = tf.pow(1.0 - true_class_probability, gamma)
-    return focal_weight * cross_entropy
+    return loss
 
 
 def load_preprocess_mobilenet(image_path, mask_path):
