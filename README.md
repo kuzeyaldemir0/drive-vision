@@ -130,16 +130,18 @@ Val mIoU peaked at 28.3% on epoch 7, then declined to 28.2% by epoch 10. Train m
 
 ### Sparse categorical focal loss experiment
 
-To test whether rare-class performance could be improved by focusing training on hard pixels, the strongest MobileNet U-Net setup was rerun with sparse categorical focal loss (`gamma=2.0`) instead of sparse categorical cross-entropy. Nothing else changed: same MobileNetV2 skip architecture, same 160/40 split, same horizontal flip augmentation, same learning rates, same epoch counts, and same checkpointing on `val_miou`.
+To test whether rare-class performance could be improved by focusing training on hard pixels, the strongest MobileNet U-Net setup was rerun with sparse categorical focal loss instead of sparse categorical cross-entropy. Nothing else changed: same MobileNetV2 skip architecture, same 160/40 split, same horizontal flip augmentation, same learning rates, same epoch counts, and same checkpointing on `val_miou`.
 
 | Run | Best Val Accuracy | Best Val mIoU | Best Val Loss | Notes |
 |---|---:|---:|---:|---|
 | Frozen encoder + CE | 82.2% | **27.4%** | 0.636 | Original skip + flip run |
+| Frozen encoder + focal loss (γ=1.5) | 80.5% | 26.0% | 0.522 | Colab L4 run |
 | Frozen encoder + focal loss (γ=2) | 81.0% | 26.6% | 0.428 | Lower loss scale, lower mIoU |
 | Fine-tuned encoder + CE (lr=1e-4) | 83.0% | **28.3%** | 0.634 | Current best |
+| Fine-tuned encoder + focal loss (γ=1.5, lr=1e-4) | 80.9% | 26.7% | 0.572 | Worse than γ=2 and CE |
 | Fine-tuned encoder + focal loss (γ=2, lr=1e-4) | 81.5% | 27.0% | 0.443 | Higher train mIoU, worse validation mIoU |
 
-Focal loss increased training mIoU substantially during fine-tuning (47.5% vs. 42.2% for CE) but did not translate into validation gains. The best fine-tuned focal model reached 27.0% validation mIoU, 1.3 points below the cross-entropy best. This reinforces the earlier pattern: loss reweighting can emphasize hard pixels, but it cannot compensate for the limited number of real examples for rare KITTI classes.
+Focal loss increased training mIoU substantially during fine-tuning but did not translate into validation gains. Gamma 1.5 reached 26.7% validation mIoU and gamma 2.0 reached 27.0%, both below the 28.3% cross-entropy best. This reinforces the earlier pattern: loss reweighting can emphasize hard pixels, but it cannot compensate for the limited number of real examples for rare KITTI classes.
 
 ### Earlier loss function experiments (from 30-epoch runs, directionally valid)
 
@@ -163,7 +165,9 @@ The top 4 classes (vegetation, road, sky, terrain) cover 74% of all pixels. The 
 | MobileNetV2 encoder, no skips | 15.9% |
 | MobileNetV2 encoder, with skips | 25.0% |
 | MobileNetV2 + skips + flip aug | 27.4% |
+| MobileNetV2 + skips + flip aug + focal loss (γ=1.5) | 26.0% |
 | MobileNetV2 + skips + flip aug + focal loss (γ=2) | 26.6% |
+| MobileNetV2 + skips + flip + focal loss (γ=1.5) + fine-tune (lr=1e-4) | 26.7% |
 | MobileNetV2 + skips + flip + focal loss (γ=2) + fine-tune (lr=1e-4) | 27.0% |
 | MobileNetV2 + skips + flip + fine-tune (lr=1e-5) | 27.8% |
 | **MobileNetV2 + skips + flip + fine-tune (lr=1e-4)** | **28.3%** |
@@ -180,6 +184,18 @@ These weren't pursued in this project but are natural follow-ups for pushing pas
 - Attention U-Net or DeepLabV3+ as alternative architectures
 - Higher resolution training (256×768) using more of KITTI's native 1242px width
 - Encoder fine-tuning with selective unfreezing (e.g. only top blocks) and LR warmup schedules
+
+## Compute Benchmark
+
+Short timing runs compared the same MobileNet U-Net focal-loss training loop across local Apple silicon and Google Colab GPUs. Each benchmark used one warmup epoch followed by three timed epochs at 128×384 resolution, batch size 8, flip augmentation, and `gamma=1.5`.
+
+| Environment | Accelerator | Timed Avg / Epoch | Takeaway |
+|---|---|---:|---|
+| MacBook Air M4 | Apple M4 GPU via `tensorflow-metal` | 12.1s | Faster than Colab T4 for this workload |
+| Google Colab | Tesla T4 | 14.5s | Not worth using for speed versus local M4 |
+| Google Colab Pro | NVIDIA L4 | **3.1s** | ~3.9× faster than local M4 |
+
+The Colab L4 runtime made full 20+10 epoch experiments practical in a few minutes, while the T4 did not improve iteration speed. Colab is therefore useful when an L4 or better GPU is available, but the local M4 remains a strong default for small experiments.
 
 ## Dataset
 
